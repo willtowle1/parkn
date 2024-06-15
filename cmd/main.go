@@ -2,20 +2,17 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"os"
 
-	vision "cloud.google.com/go/vision/apiv1"
+	"github.com/willtowle1/parkn/internal/service"
 )
 
 func main() {
 	ctx := context.Background()
-
-	client, err := vision.NewImageAnnotatorClient(ctx)
-	if err != nil {
-		log.Fatalf("failed to create client: %v ", err)
-	}
 
 	filename := "../data/IMG_5731.png"
 	f, err := os.Open(filename)
@@ -24,23 +21,25 @@ func main() {
 	}
 	defer f.Close()
 
-	image, err := vision.NewImageFromReader(f)
+	imageData, _ := io.ReadAll(f)
+
+	b64Str := base64.StdEncoding.EncodeToString(imageData)
+	fmt.Println(b64Str[:10])
+
+	logger := log.New(io.Discard, "", log.Ldate)
+	textExtractor := service.NewTextExtractor(*logger)
+
+	image, err := textExtractor.ConvertToVisionImage(ctx, b64Str)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		return
 	}
-
-	annotations, err := client.DetectTexts(ctx, image, nil, 10)
+	text, err := textExtractor.ExtractTextFromImage(ctx, image)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
+		return
 	}
 
-	if len(annotations) == 0 {
-		log.Fatal("no annotations found")
-	}
-
-	fmt.Println("Text:")
-	for _, annotation := range annotations {
-		fmt.Println("Description: ", annotation.Description)
-	}
+	fmt.Println(text)
 
 }
