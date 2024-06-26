@@ -2,20 +2,25 @@ package service
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/willtowle1/parkn/internal/common/errs"
+	"github.com/willtowle1/parkn/internal/common/logger"
 	"github.com/willtowle1/parkn/internal/model"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"google.golang.org/genproto/googleapis/cloud/vision/v1"
 )
 
 const (
 	errCreatingParkn = "failed to create parkn"
+
+	msgCreateParknSuccess = "successfully created parkn alert"
 )
 
-type IParknRepository interface {
-	CreateParkn(ctx context.Context, inputParkn model.Parkn) error
+type IDal interface {
+	CreateOne(ctx context.Context, input model.Parkn) (string, error)
+	GetOne(ctx context.Context, filter interface{}, opts ...*options.FindOneOptions) (model.Parkn, error)
+	DeleteOne(ctx context.Context, filter interface{}) (int64, error)
 }
 
 type ITextExtractor interface {
@@ -23,24 +28,24 @@ type ITextExtractor interface {
 	ConvertToVisionImage(ctx context.Context, imageString string) (*vision.Image, error)
 }
 
-type IGPTClient interface {
-	GetEndDate(ctx context.Context, inputText string) (time.Time, error)
+type IDateSniper interface {
+	SnipeDate(ctx context.Context, str string) (time.Time, error)
 }
 
-func NewParknService(logger log.Logger, textExtractor ITextExtractor, gptClient IGPTClient, repository IParknRepository) *ParknService {
+func NewParknService(logger logger.Logger, textExtractor ITextExtractor, sniper IDateSniper, repository IDal) *ParknService {
 	return &ParknService{
 		logger:        logger,
 		textExtractor: textExtractor,
-		gptClient:     gptClient,
+		sniper:        sniper,
 		repository:    repository,
 	}
 }
 
 type ParknService struct {
-	logger        log.Logger
+	logger        logger.Logger
 	textExtractor ITextExtractor
-	gptClient     IGPTClient
-	repository    IParknRepository
+	sniper        IDateSniper
+	repository    IDal
 }
 
 // CreateParkn creates a parkn alert and returns the endDate
@@ -48,29 +53,35 @@ func (s *ParknService) CreateParkn(ctx context.Context, phoneNumber, imageEncodi
 
 	image, err := s.textExtractor.ConvertToVisionImage(ctx, imageEncoding)
 	if err != nil {
+		s.logger.Error(ctx, errCreatingParkn, err)
 		return "", errs.WrapError(errCreatingParkn, err)
 	}
 
 	extractedText, err := s.textExtractor.ExtractTextFromImage(ctx, image)
 	if err != nil {
+		s.logger.Error(ctx, errCreatingParkn, err)
 		return "", errs.WrapError(errCreatingParkn, err)
 	}
 
-	endDate, err := s.gptClient.GetEndDate(ctx, extractedText)
-	if err != nil {
-		return "", errs.WrapError(errCreatingParkn, err)
-	}
+	endDate, _ := s.sniper.SnipeDate(ctx, extractedText)
 
-	parkn := model.Parkn{
+	parknInput := model.Parkn{
 		PhoneNumber: phoneNumber,
-		StartDate:   time.Now().UTC().String(),
-		EndDate:     endDate.String(),
+		MoveByDate:  endDate,
 	}
 
-	err = s.repository.CreateParkn(ctx, parkn)
+	id, err := s.repository.CreateOne(ctx, parknInput)
 	if err != nil {
+		s.logger.Error(ctx, errCreatingParkn, err)
 		return "", errs.WrapError(errCreatingParkn, err)
 	}
 
-	return endDate.String(), nil
+	alertDate := endDate.String()
+	s.logger.Info(ctx, msgCreateParknSuccess, "id", id, "alertDate", alertDate)
+
+	return alertDate, nil
+}
+
+func truncateToMinute(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), 0, 0, t.Location())
 }

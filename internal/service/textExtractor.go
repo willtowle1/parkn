@@ -7,11 +7,11 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
-	"log"
 	"strings"
 
 	visionApi "cloud.google.com/go/vision/apiv1"
 	"github.com/willtowle1/parkn/internal/common/errs"
+	"github.com/willtowle1/parkn/internal/common/logger"
 	"google.golang.org/genproto/googleapis/cloud/vision/v1"
 )
 
@@ -27,11 +27,11 @@ const (
 )
 
 type TextExtractor struct {
-	logger log.Logger
+	logger logger.Logger
 	client *visionApi.ImageAnnotatorClient
 }
 
-func NewTextExtractor(logger log.Logger, client *visionApi.ImageAnnotatorClient) *TextExtractor {
+func NewTextExtractor(logger logger.Logger, client *visionApi.ImageAnnotatorClient) *TextExtractor {
 	return &TextExtractor{
 		logger: logger,
 		client: client,
@@ -73,7 +73,7 @@ func (s *TextExtractor) ConvertToVisionImage(ctx context.Context, b64Str string)
 	case jpegFormat:
 		imageBytes, err = encodeToJPEG(image)
 	default:
-		return nil, errs.WrapError(errConvertingImage, errors.New("unsuported image format"))
+		return nil, errs.WrapError(errConvertingImage, errors.New("unsupported image format"))
 	}
 
 	if err != nil {

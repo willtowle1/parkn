@@ -1,7 +1,8 @@
 package model
 
+import "time"
+
 type Parkn struct {
-	PhoneNumber string `json:"phoneNumber"`
-	StartDate   string `json:"startDate"`
-	EndDate     string `json:"endDate"`
+	PhoneNumber string    `json:"phoneNumber"`
+	MoveByDate  time.Time `json:"MoveByDate"`
 }
