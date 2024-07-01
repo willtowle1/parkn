@@ -4,5 +4,5 @@ import "time"
 
 type Parkn struct {
 	PhoneNumber string    `json:"phoneNumber"`
-	MoveByDate  time.Time `json:"MoveByDate"`
+	MoveByDate  time.Time `json:"moveByDate"`
 }

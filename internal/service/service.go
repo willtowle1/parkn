@@ -2,12 +2,12 @@ package service
 
 import (
 	"context"
+	"regexp"
 	"time"
 
 	"github.com/willtowle1/parkn/internal/common/errs"
 	"github.com/willtowle1/parkn/internal/common/logger"
 	"github.com/willtowle1/parkn/internal/model"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"google.golang.org/genproto/googleapis/cloud/vision/v1"
 )
 
@@ -19,7 +19,7 @@ const (
 
 type IDal interface {
 	CreateOne(ctx context.Context, input model.Parkn) (string, error)
-	GetOne(ctx context.Context, filter interface{}, opts ...*options.FindOneOptions) (model.Parkn, error)
+	Get(ctx context.Context, filter interface{}) ([]model.Parkn, error)
 	DeleteOne(ctx context.Context, filter interface{}) (int64, error)
 }
 
@@ -66,7 +66,7 @@ func (s *ParknService) CreateParkn(ctx context.Context, phoneNumber, imageEncodi
 	endDate, _ := s.sniper.SnipeDate(ctx, extractedText)
 
 	parknInput := model.Parkn{
-		PhoneNumber: phoneNumber,
+		PhoneNumber: s.cleanPhoneNumber(phoneNumber),
 		MoveByDate:  endDate,
 	}
 
@@ -84,4 +84,9 @@ func (s *ParknService) CreateParkn(ctx context.Context, phoneNumber, imageEncodi
 
 func truncateToMinute(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), 0, 0, t.Location())
+}
+
+func (s *ParknService) cleanPhoneNumber(str string) string {
+	r := regexp.MustCompile(`\D`)
+	return r.ReplaceAllString(str, "")
 }

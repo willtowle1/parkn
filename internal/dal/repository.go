@@ -7,15 +7,14 @@ import (
 	"github.com/willtowle1/parkn/internal/common/logger"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const (
 	msgCreateOneSuccess = "successfully created one"
-	msgGetOneSuccess    = "successfully got one"
+	msgGetSuccess       = "successfully got from collection"
 
 	errCreateOne = "error while creating one"
-	errGetOne    = "error while getting one"
+	errGet       = "error while getting from collection"
 )
 
 type Dal[D any] struct {
@@ -36,19 +35,24 @@ func (r *Dal[D]) CreateOne(ctx context.Context, input D) (string, error) {
 		return "", errors.New(errCreateOne)
 	}
 
-	id := res.InsertedID.(primitive.ObjectID)
-	r.logger.Info(ctx, msgCreateOneSuccess, "id", id.Hex())
-	return id.Hex(), nil
+	id := res.InsertedID.(primitive.ObjectID).Hex()
+	r.logger.Info(ctx, msgCreateOneSuccess, "id", id)
+	return id, nil
 }
 
-func (r *Dal[D]) GetOne(ctx context.Context, filter interface{}, opts ...*options.FindOneOptions) (D, error) {
-	var res D
-	err := r.collection.FindOne(ctx, filter, opts...).Decode(&res)
+func (r *Dal[D]) Get(ctx context.Context, filter interface{}) ([]D, error) {
+	var res []D
+
+	cur, err := r.collection.Find(ctx, filter)
 	if err != nil {
-		return res, errors.New(errGetOne)
+		return res, errors.New(errGet)
+	}
+	err = cur.All(ctx, &res)
+	if err != nil {
+		return res, errors.New(errGet)
 	}
 
-	r.logger.Info(ctx, msgGetOneSuccess, res)
+	r.logger.Info(ctx, msgGetSuccess, res)
 	return res, nil
 }
 

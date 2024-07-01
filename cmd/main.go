@@ -9,8 +9,10 @@ import (
 	"os"
 
 	vision "cloud.google.com/go/vision/apiv1"
+	"github.com/gin-gonic/gin"
+	"github.com/willtowle1/parkn/internal/app"
 	"github.com/willtowle1/parkn/internal/common/logger"
-	"github.com/willtowle1/parkn/internal/service"
+	"github.com/willtowle1/parkn/internal/config"
 )
 
 func main() {
@@ -22,11 +24,37 @@ func main() {
 		log.Fatal("failed to initialize logger ", err)
 	}
 
+	config, err := config.Init(".env")
+	if err != nil {
+		logger.Error(ctx, "failed to get config", err)
+		return
+	}
+
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.New()
+
+	errs := make(chan error)
+
+	imageClient, err := vision.NewImageAnnotatorClient(ctx)
+	if err != nil {
+		logger.Error(ctx, "failed to get image client", err)
+		return
+	}
+
+	mongoClient, err := app.InitDatabase(ctx, logger, errs, *config)
+	if err != nil {
+		logger.Error(ctx, "failed to get mongo client", err)
+		return
+	}
+	database := mongoClient.Database(config.MongoDatabaseName)
+
+	parknService := app.RegisterParknEndpoints(logger, router, imageClient, database)
+
 	filename := "../data/IMG_5718.png"
-	// filename := "../../data/IMG_5731.png"
 	f, err := os.Open(filename)
 	if err != nil {
-		log.Fatalf("failed to open file: %v", err)
+		logger.Error(ctx, "failed to open file", err)
+		return
 	}
 	defer f.Close()
 
@@ -34,47 +62,10 @@ func main() {
 
 	b64Str := base64.StdEncoding.EncodeToString(imageData)
 
-	imageClient, err := vision.NewImageAnnotatorClient(ctx)
+	endDate, err := parknService.CreateParkn(ctx, "+1 (314) 562-8484", b64Str)
 	if err != nil {
-		fmt.Println(err)
+		logger.Error(ctx, "failed to get endDate", err)
 		return
 	}
-
-	textExtractor := service.NewTextExtractor(logger, imageClient)
-	dateSniper := service.NewDateSniper(logger)
-
-	image, err := textExtractor.ConvertToVisionImage(ctx, b64Str)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	text, err := textExtractor.ExtractTextFromImage(ctx, image)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	endDate, err := dateSniper.SnipeDate(ctx, text)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Println(endDate.String())
-
-	// client := openai.NewClient("sk-parkn-X4Se1KquYzKrWLFAYm5pT3BlbkFJcCSOfEqEVHUXMnDuIPIy")
-	// gptClient := service.NewGPTClient(*logger, client)
-
-	// date, err := gptClient.GetEndDate(context.Background(), text)
-	// if err != nil {
-	// 	fmt.Println(err)
-	// 	return
-	// }
-
-	// fmt.Println(date)
-
-	// extractedDate := extractFrequencyFromText(text)
-
-	// fmt.Println(extractedDate)
+	fmt.Println(endDate)
 }
