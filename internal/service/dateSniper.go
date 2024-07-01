@@ -74,7 +74,7 @@ func (d *DateSniper) SnipeDate(ctx context.Context, str string) (time.Time, erro
 		return time.Time{}, errs.WrapError(errSnipingDate, err)
 	}
 
-	nextOccurrence, err := d.findNextOccurrence(ctx, freq)
+	nextOccurrence, err := d.findNextOccurrence(freq)
 	if err != nil {
 		d.logger.Error(ctx, errSnipingDate, err)
 		return time.Time{}, errs.WrapError(errSnipingDate, err)
@@ -82,7 +82,7 @@ func (d *DateSniper) SnipeDate(ctx context.Context, str string) (time.Time, erro
 	return nextOccurrence, nil
 }
 
-func (d *DateSniper) findNextOccurrence(ctx context.Context, freq frequency) (time.Time, error) {
+func (d *DateSniper) findNextOccurrence(freq frequency) (time.Time, error) {
 
 	loc, err := time.LoadLocation("EST")
 	if err != nil {
