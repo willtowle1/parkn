@@ -1,71 +1,93 @@
 package main
 
 import (
-	"context"
-	"encoding/base64"
 	"fmt"
-	"io"
-	"log"
-	"os"
+	"net/http"
 
-	vision "cloud.google.com/go/vision/apiv1"
 	"github.com/gin-gonic/gin"
-	"github.com/willtowle1/parkn/internal/app"
-	"github.com/willtowle1/parkn/internal/common/logger"
-	"github.com/willtowle1/parkn/internal/config"
+	"github.com/twilio/twilio-go/twiml"
 )
 
 func main() {
 
-	ctx := context.Background()
+	router := gin.Default()
 
-	logger, err := logger.NewDefaultLogger("Debug")
-	if err != nil {
-		log.Fatal("failed to initialize logger ", err)
-	}
+	router.POST("/sms", func(context *gin.Context) {
 
-	config, err := config.Init(".env")
-	if err != nil {
-		logger.Error(ctx, "failed to get config", err)
-		return
-	}
+		incomingMsg := context.PostForm("Body")
+		incomingPhoneNumber := context.PostForm("From")
+		mediaUrl := context.PostForm("MediaUrl0")
+		fmt.Println(incomingMsg, incomingPhoneNumber, mediaUrl)
 
-	gin.SetMode(gin.ReleaseMode)
-	router := gin.New()
+		// https://help.twilio.com/articles/223181368
+		// https://www.twilio.com/docs/messaging/api/media-resource#fetch-a-media
+		// look into setting env vars properly (TWILIO_ACCOUNT_SID & TWILIO_AUTH_TOKEN)
 
-	errs := make(chan error)
+		message := &twiml.MessagingMessage{
+			Body: "Hello from within!",
+		}
 
-	imageClient, err := vision.NewImageAnnotatorClient(ctx)
-	if err != nil {
-		logger.Error(ctx, "failed to get image client", err)
-		return
-	}
+		res, err := twiml.Messages([]twiml.Element{message})
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		context.Header("Content-Type", "text/xml")
+		context.String(http.StatusOK, res)
 
-	mongoClient, err := app.InitDatabase(ctx, logger, errs, *config)
-	if err != nil {
-		logger.Error(ctx, "failed to get mongo client", err)
-		return
-	}
-	database := mongoClient.Database(config.MongoDatabaseName)
+	})
 
-	parknService := app.RegisterParknEndpoints(logger, router, imageClient, database)
+	router.Run(":3000")
 
-	filename := "../data/IMG_5718.png"
-	f, err := os.Open(filename)
-	if err != nil {
-		logger.Error(ctx, "failed to open file", err)
-		return
-	}
-	defer f.Close()
+	// ctx := context.Background()
 
-	imageData, _ := io.ReadAll(f)
+	// logger, err := logger.NewDefaultLogger("Debug")
+	// if err != nil {
+	// 	log.Fatal("failed to initialize logger ", err)
+	// }
 
-	b64Str := base64.StdEncoding.EncodeToString(imageData)
+	// config, err := config.Init(".env")
+	// if err != nil {
+	// 	logger.Error(ctx, "failed to get config", err)
+	// 	return
+	// }
 
-	endDate, err := parknService.CreateParkn(ctx, "+1 (314) 562-8484", b64Str)
-	if err != nil {
-		logger.Error(ctx, "failed to get endDate", err)
-		return
-	}
-	fmt.Println(endDate)
+	// gin.SetMode(gin.ReleaseMode)
+	// router := gin.New()
+
+	// errs := make(chan error)
+
+	// imageClient, err := vision.NewImageAnnotatorClient(ctx)
+	// if err != nil {
+	// 	logger.Error(ctx, "failed to get image client", err)
+	// 	return
+	// }
+
+	// mongoClient, err := app.InitDatabase(ctx, logger, errs, *config)
+	// if err != nil {
+	// 	logger.Error(ctx, "failed to get mongo client", err)
+	// 	return
+	// }
+	// database := mongoClient.Database(config.MongoDatabaseName)
+
+	// parknService := app.RegisterParknEndpoints(logger, router, imageClient, database)
+
+	// filename := "../data/IMG_5718.png"
+	// f, err := os.Open(filename)
+	// if err != nil {
+	// 	logger.Error(ctx, "failed to open file", err)
+	// 	return
+	// }
+	// defer f.Close()
+
+	// imageData, _ := io.ReadAll(f)
+
+	// b64Str := base64.StdEncoding.EncodeToString(imageData)
+
+	// endDate, err := parknService.CreateParkn(ctx, "+1 (314) 562-8484", b64Str)
+	// if err != nil {
+	// 	logger.Error(ctx, "failed to get endDate", err)
+	// 	return
+	// }
+	// fmt.Println(endDate)
 }

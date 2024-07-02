@@ -34,6 +34,8 @@ type Controller struct {
 	service IService
 }
 
+// POST should handle incoming requests from Twilio
+
 func NewController(logger logger.Logger, service IService) *Controller {
 	return &Controller{
 		logger:  logger,
@@ -41,11 +43,12 @@ func NewController(logger logger.Logger, service IService) *Controller {
 	}
 }
 
-func (c *Controller) RegisterRoutes(router gin.IRouter) {
+func (c *Controller) RegisterRoutes(router gin.IRouter) { // this should be the twilio router (?)
 	route := router.Group("/v1")
 	route.Handle(http.MethodPost, "/parkn", c.createParkn)
 }
 
+// set this to handle POST from router
 func (c *Controller) createParkn(ctx *gin.Context) {
 	reqCtx := ctx.Request.Context()
 
