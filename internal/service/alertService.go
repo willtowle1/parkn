@@ -7,6 +7,7 @@ import (
 	"github.com/willtowle1/parkn/internal/common/errs"
 	"github.com/willtowle1/parkn/internal/common/logger"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 const (
@@ -31,7 +32,7 @@ func (s *AlertService) GetParknsToAlert(ctx context.Context, tomorrow time.Time)
 
 	filter := bson.D{
 		{Key: "moveByDate", Value: bson.D{
-			{Key: "$lte", Value: tomorrow},
+			{Key: "$lte", Value: primitive.NewDateTimeFromTime(tomorrow)},
 		}},
 	}
 

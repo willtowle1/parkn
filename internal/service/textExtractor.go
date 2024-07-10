@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	visionApi "cloud.google.com/go/vision/apiv1"
+	vision "cloud.google.com/go/vision/v2/apiv1/visionpb"
 	"github.com/willtowle1/parkn/internal/common/errs"
 	"github.com/willtowle1/parkn/internal/common/logger"
-	"google.golang.org/genproto/googleapis/cloud/vision/v1"
 )
 
 const (

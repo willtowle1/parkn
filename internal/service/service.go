@@ -2,13 +2,12 @@ package service
 
 import (
 	"context"
-	"regexp"
 	"time"
 
+	vision "cloud.google.com/go/vision/v2/apiv1/visionpb"
 	"github.com/willtowle1/parkn/internal/common/errs"
 	"github.com/willtowle1/parkn/internal/common/logger"
 	"github.com/willtowle1/parkn/internal/model"
-	"google.golang.org/genproto/googleapis/cloud/vision/v1"
 )
 
 const (
@@ -32,13 +31,9 @@ type IDateSniper interface {
 	SnipeDate(ctx context.Context, str string) (time.Time, error)
 }
 
-func NewParknService(logger logger.Logger, textExtractor ITextExtractor, sniper IDateSniper, repository IDal) *ParknService {
-	return &ParknService{
-		logger:        logger,
-		textExtractor: textExtractor,
-		sniper:        sniper,
-		repository:    repository,
-	}
+type IClient interface {
+	FetchMedia(ctx context.Context, mediaUrl string) (*vision.Image, error)
+	Notify(ctx context.Context, phoneNumber, message string) error
 }
 
 type ParknService struct {
@@ -46,12 +41,23 @@ type ParknService struct {
 	textExtractor ITextExtractor
 	sniper        IDateSniper
 	repository    IDal
+	httpClient    IClient
+}
+
+func NewParknService(logger logger.Logger, textExtractor ITextExtractor, sniper IDateSniper, repository IDal, httpClient IClient) *ParknService {
+	return &ParknService{
+		logger:        logger,
+		textExtractor: textExtractor,
+		sniper:        sniper,
+		repository:    repository,
+		httpClient:    httpClient,
+	}
 }
 
 // CreateParkn creates a parkn alert and returns the endDate
-func (s *ParknService) CreateParkn(ctx context.Context, phoneNumber, imageEncoding string) (string, error) {
+func (s *ParknService) CreateParkn(ctx context.Context, phoneNumber, mediaUrl string) (string, error) {
 
-	image, err := s.textExtractor.ConvertToVisionImage(ctx, imageEncoding)
+	image, err := s.httpClient.FetchMedia(ctx, mediaUrl)
 	if err != nil {
 		s.logger.Error(ctx, errCreatingParkn, err)
 		return "", errs.WrapError(errCreatingParkn, err)
@@ -63,11 +69,15 @@ func (s *ParknService) CreateParkn(ctx context.Context, phoneNumber, imageEncodi
 		return "", errs.WrapError(errCreatingParkn, err)
 	}
 
-	endDate, _ := s.sniper.SnipeDate(ctx, extractedText)
+	moveByDate, err := s.sniper.SnipeDate(ctx, extractedText)
+	if err != nil {
+		s.logger.Error(ctx, errCreatingParkn, err)
+		return "", errs.WrapError(errCreatingParkn, err)
+	}
 
 	parknInput := model.Parkn{
-		PhoneNumber: s.cleanPhoneNumber(phoneNumber),
-		MoveByDate:  endDate,
+		PhoneNumber: phoneNumber,
+		MoveByDate:  moveByDate,
 	}
 
 	id, err := s.repository.CreateOne(ctx, parknInput)
@@ -76,17 +86,12 @@ func (s *ParknService) CreateParkn(ctx context.Context, phoneNumber, imageEncodi
 		return "", errs.WrapError(errCreatingParkn, err)
 	}
 
-	alertDate := endDate.String()
+	alertDate := fmtToString(moveByDate)
 	s.logger.Info(ctx, msgCreateParknSuccess, "id", id, "alertDate", alertDate)
 
 	return alertDate, nil
 }
 
-func truncateToMinute(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), 0, 0, t.Location())
-}
-
-func (s *ParknService) cleanPhoneNumber(str string) string {
-	r := regexp.MustCompile(`\D`)
-	return r.ReplaceAllString(str, "")
+func fmtToString(t time.Time) string {
+	return t.Format("01-02-2006")
 }

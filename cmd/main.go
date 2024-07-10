@@ -1,93 +1,84 @@
 package main
 
 import (
-	"fmt"
+	"context"
+	"log"
 	"net/http"
+	"os"
+	"time"
 
+	vision "cloud.google.com/go/vision/apiv1"
 	"github.com/gin-gonic/gin"
-	"github.com/twilio/twilio-go/twiml"
+	"github.com/go-co-op/gocron"
+	"github.com/twilio/twilio-go"
+	"github.com/willtowle1/parkn/internal/app"
+	"github.com/willtowle1/parkn/internal/common/logger"
+	"github.com/willtowle1/parkn/internal/config"
 )
 
 func main() {
 
+	ctx := context.Background()
+
+	config, err := config.Init(".env")
+	if err != nil {
+		log.Fatalf("failed to load config: %s", err)
+	}
+
+	logger, err := logger.NewDefaultLogger(config.LogLevel)
+	if err != nil {
+		log.Fatalf("failed to get new logger: %s", err)
+	}
+
+	errs := make(chan error)
+
+	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 
-	router.POST("/sms", func(context *gin.Context) {
+	extractorClient, err := vision.NewImageAnnotatorClient(ctx)
+	if err != nil {
+		logger.Error(ctx, "failed to get image client", err)
+		os.Exit(1)
+	}
 
-		incomingMsg := context.PostForm("Body")
-		incomingPhoneNumber := context.PostForm("From")
-		mediaUrl := context.PostForm("MediaUrl0")
-		fmt.Println(incomingMsg, incomingPhoneNumber, mediaUrl)
+	mongoClient, err := app.InitDatabase(ctx, logger, errs, *config)
+	if err != nil {
+		logger.Error(ctx, "failed to get mongo client", err)
+		os.Exit(1)
+	}
+	database := mongoClient.Database(config.MongoDatabaseName)
 
-		// https://help.twilio.com/articles/223181368
-		// https://www.twilio.com/docs/messaging/api/media-resource#fetch-a-media
-		// look into setting env vars properly (TWILIO_ACCOUNT_SID & TWILIO_AUTH_TOKEN)
+	twilioCreds := twilio.ClientParams{
+		Username: config.TwilioSID,
+		Password: config.TwilioToken,
+	}
+	twilioClient := twilio.NewRestClientWithParams(twilioCreds)
+	app.RegisterParknEndpoints(logger, router, extractorClient, database, twilioCreds)
+	autoAlertService := app.RegisterAutoAlertService(logger, database, twilioClient, config.TwilioNumber)
 
-		message := &twiml.MessagingMessage{
-			Body: "Hello from within!",
-		}
+	scheduler := gocron.NewScheduler(time.UTC)
+	_, err = scheduler.Every(config.AutoAlertPeriod).Minute().Do(autoAlertService.Alert, ctx)
+	if err != nil {
+		logger.Error(ctx, "failed to start auto service", err)
+	}
 
-		res, err := twiml.Messages([]twiml.Element{message})
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		context.Header("Content-Type", "text/xml")
-		context.String(http.StatusOK, res)
-
+	mainApp := app.NewApp(logger, &http.Server{
+		Addr:    config.ServerAddress,
+		Handler: router,
 	})
 
-	router.Run(":3000")
+	mainApp.Start(ctx, errs, config.ServerAddress)
 
-	// ctx := context.Background()
+	scheduler.StartAsync()
 
-	// logger, err := logger.NewDefaultLogger("Debug")
-	// if err != nil {
-	// 	log.Fatal("failed to initialize logger ", err)
-	// }
+	app.WaitForTermination(ctx, logger, errs)
 
-	// config, err := config.Init(".env")
-	// if err != nil {
-	// 	logger.Error(ctx, "failed to get config", err)
-	// 	return
-	// }
+	scheduler.Stop()
 
-	// gin.SetMode(gin.ReleaseMode)
-	// router := gin.New()
-
-	// errs := make(chan error)
-
-	// imageClient, err := vision.NewImageAnnotatorClient(ctx)
-	// if err != nil {
-	// 	logger.Error(ctx, "failed to get image client", err)
-	// 	return
-	// }
-
-	// mongoClient, err := app.InitDatabase(ctx, logger, errs, *config)
-	// if err != nil {
-	// 	logger.Error(ctx, "failed to get mongo client", err)
-	// 	return
-	// }
-	// database := mongoClient.Database(config.MongoDatabaseName)
-
-	// parknService := app.RegisterParknEndpoints(logger, router, imageClient, database)
-
-	// filename := "../data/IMG_5718.png"
-	// f, err := os.Open(filename)
-	// if err != nil {
-	// 	logger.Error(ctx, "failed to open file", err)
-	// 	return
-	// }
-	// defer f.Close()
-
-	// imageData, _ := io.ReadAll(f)
-
-	// b64Str := base64.StdEncoding.EncodeToString(imageData)
-
-	// endDate, err := parknService.CreateParkn(ctx, "+1 (314) 562-8484", b64Str)
-	// if err != nil {
-	// 	logger.Error(ctx, "failed to get endDate", err)
-	// 	return
-	// }
-	// fmt.Println(endDate)
+	err = mainApp.Shutdown(ctx, time.Duration(config.TerminationGracePeriod)*time.Second)
+	if err != nil {
+		logger.Error(ctx, "error while shutting down server", err)
+	} else {
+		logger.Info(ctx, "server terminated successfully")
+	}
 }

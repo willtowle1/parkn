@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/twilio/twilio-go"
+	twilioApi "github.com/twilio/twilio-go/rest/api/v2010"
 	"github.com/willtowle1/parkn/internal/common/logger"
 )
 
@@ -16,28 +18,28 @@ const (
 	msgAlertSuccessful  = "successfully sent alert"
 	msgDeleteSuccessful = "successfully deleted parkn"
 	msgAlertComplete    = "alert logic complete"
-)
 
-type VoiPService interface {
-	SendAlert(ctx context.Context, phoneNumber string) error
-}
+	alertMsg = "Move your car by tomorrow!"
+)
 
 type IAlertService interface {
 	GetParknsToAlert(ctx context.Context, tomorrow time.Time) ([]string, error)
-	DeleteParkn(ctx context.Context, phoneNumber string) (int64, error)
+	DeleteParkn(ctx context.Context, phoneNumber string) error
 }
 
 type AutoAlertService struct {
-	logger  logger.Logger
-	service IAlertService
-	voip    VoiPService
+	logger       logger.Logger
+	service      IAlertService
+	twilio       *twilio.RestClient
+	twilioNumber string
 }
 
-func NewAutoAlertService(logger logger.Logger, service IAlertService, voip VoiPService) *AutoAlertService {
+func NewAutoAlertService(logger logger.Logger, service IAlertService, twilio *twilio.RestClient, twilioNumber string) *AutoAlertService {
 	return &AutoAlertService{
-		logger:  logger,
-		service: service,
-		voip:    voip,
+		logger:       logger,
+		service:      service,
+		twilio:       twilio,
+		twilioNumber: twilioNumber,
 	}
 }
 
@@ -54,14 +56,14 @@ func (s *AutoAlertService) Alert(ctx context.Context) {
 	successful := make([]string, 0)
 	unsuccessful := make([]string, 0)
 	for _, phoneNumber := range toAlert {
-		err = s.voip.SendAlert(ctx, phoneNumber)
+		err = s.sendAlert(phoneNumber)
 		if err != nil {
-			// would be better to place into a separate queue to process later
+			// TODO: would be better to place into a separate queue to process later
 			unsuccessful = append(unsuccessful, phoneNumber)
 			s.logger.Error(ctx, errFailedToAlert, err, "phoneNumber", phoneNumber)
 		} else {
 			s.logger.Info(ctx, msgAlertSuccessful, "phoneNumber", phoneNumber)
-			_, err = s.service.DeleteParkn(ctx, phoneNumber)
+			err = s.service.DeleteParkn(ctx, phoneNumber)
 			if err != nil {
 				unsuccessful = append(unsuccessful, phoneNumber)
 				s.logger.Error(ctx, errDeleteParkn, err, "phoneNumber", phoneNumber)
@@ -73,5 +75,21 @@ func (s *AutoAlertService) Alert(ctx context.Context) {
 	}
 
 	s.logger.Info(ctx, msgAlertComplete, "successful", strings.Join(successful, ", "), "unsuccessful", strings.Join(unsuccessful, ", "))
+}
 
+func (s *AutoAlertService) sendAlert(phoneNumber string) error {
+
+	params := &twilioApi.CreateMessageParams{
+		To:   s.strPtr(phoneNumber),
+		From: s.strPtr(s.twilioNumber),
+		Body: s.strPtr(alertMsg),
+	}
+
+	_, err := s.twilio.Api.CreateMessage(params)
+
+	return err
+}
+
+func (s *AutoAlertService) strPtr(str string) *string {
+	return &str
 }

@@ -36,7 +36,6 @@ func (r *Dal[D]) CreateOne(ctx context.Context, input D) (string, error) {
 	}
 
 	id := res.InsertedID.(primitive.ObjectID).Hex()
-	r.logger.Info(ctx, msgCreateOneSuccess, "id", id)
 	return id, nil
 }
 
@@ -52,7 +51,6 @@ func (r *Dal[D]) Get(ctx context.Context, filter interface{}) ([]D, error) {
 		return res, errors.New(errGet)
 	}
 
-	r.logger.Info(ctx, msgGetSuccess, res)
 	return res, nil
 }
 

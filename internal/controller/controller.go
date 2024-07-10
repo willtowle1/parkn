@@ -3,10 +3,11 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/willtowle1/parkn/internal/common/errs"
+	"github.com/twilio/twilio-go/twiml"
 	"github.com/willtowle1/parkn/internal/common/logger"
 )
 
@@ -15,6 +16,7 @@ const (
 
 	errCreateParkn          = "error while creating parkn alert"
 	errMissingPhoneNumber   = "no phone number found in context"
+	errMissingMedia         = "no media found in message"
 	errMissingImageEncoding = "no image encoding found in context"
 
 	phoneNumberKey   = "phoneNumber"
@@ -26,15 +28,13 @@ type successfulResponse struct {
 }
 
 type IService interface {
-	CreateParkn(ctx context.Context, phoneNumber, imageEncoding string) (string, error)
+	CreateParkn(ctx context.Context, phoneNumber, mediaUrl string) (string, error)
 }
 
 type Controller struct {
 	logger  logger.Logger
 	service IService
 }
-
-// POST should handle incoming requests from Twilio
 
 func NewController(logger logger.Logger, service IService) *Controller {
 	return &Controller{
@@ -43,45 +43,60 @@ func NewController(logger logger.Logger, service IService) *Controller {
 	}
 }
 
-func (c *Controller) RegisterRoutes(router gin.IRouter) { // this should be the twilio router (?)
+func (c *Controller) RegisterRoutes(router gin.IRouter) {
 	route := router.Group("/v1")
-	route.Handle(http.MethodPost, "/parkn", c.createParkn)
+	route.Handle(http.MethodPost, "/parkn/sms", c.createParkn)
 }
 
-// set this to handle POST from router
 func (c *Controller) createParkn(ctx *gin.Context) {
-	reqCtx := ctx.Request.Context()
 
-	phoneNumber, ok := reqCtx.Value(phoneNumberKey).(string)
-	if !ok {
+	ctx.Header("Content-Type", "text/xml")
+
+	phoneNumber := ctx.PostForm("From")
+	if len(phoneNumber) == 0 {
 		err := errors.New(errMissingPhoneNumber)
 		c.logger.Error(ctx, errCreateParkn, err)
-		apiErr := errs.NewApiError(http.StatusBadRequest, "BAD_REQUEST", errCreateParkn, "error", err.Error())
-		ctx.AbortWithStatusJSON(apiErr.Status, apiErr)
+		message := c.createErrorMessage(errCreateParkn, errMissingPhoneNumber)
+		ctx.String(http.StatusBadRequest, message)
 		return
 	}
 
-	imageEncoding, ok := reqCtx.Value(imageEncodingKey).(string)
-	if !ok {
-		err := errors.New(errMissingImageEncoding)
+	mediaUrl := ctx.PostForm("MediaUrl0")
+	if len(mediaUrl) == 0 {
+		err := errors.New(errMissingMedia)
 		c.logger.Error(ctx, errCreateParkn, err)
-		apiErr := errs.NewApiError(http.StatusBadRequest, "BAD_REQUEST", errCreateParkn, "error", err.Error())
-		ctx.AbortWithStatusJSON(apiErr.Status, apiErr)
+		message := c.createErrorMessage(errCreateParkn, errMissingMedia)
+		ctx.String(http.StatusBadRequest, message)
 		return
 	}
 
-	alertDate, err := c.service.CreateParkn(ctx, phoneNumber, imageEncoding)
+	moveByDate, err := c.service.CreateParkn(ctx, phoneNumber, mediaUrl)
 
 	if err != nil {
 		c.logger.Error(ctx, errCreateParkn, err)
-		apiErr := errs.NewApiError(http.StatusInternalServerError, "INTERNAL", errCreateParkn, "error", err.Error())
-		ctx.AbortWithStatusJSON(apiErr.Status, apiErr)
+		message := c.createErrorMessage(errCreateParkn, err.Error())
+		ctx.String(http.StatusInternalServerError, message)
 		return
 	}
 
-	resp := successfulResponse{
-		AlertDate: alertDate,
+	message := c.createSuccessMessage(msgCreateParknSuccess, moveByDate)
+
+	c.logger.Info(ctx, msgCreateParknSuccess, "moveByDate", moveByDate)
+	ctx.String(http.StatusOK, message)
+}
+
+func (c *Controller) createErrorMessage(msg, errString string) string {
+	message := &twiml.MessagingMessage{
+		Body: fmt.Sprintf("Error - %s: %s", msg, errString),
 	}
-	c.logger.Info(ctx, msgCreateParknSuccess, "alertDate", alertDate)
-	ctx.JSON(http.StatusOK, resp)
+	res, _ := twiml.Messages([]twiml.Element{message})
+	return res
+}
+
+func (c *Controller) createSuccessMessage(msg, moveByDate string) string {
+	message := &twiml.MessagingMessage{
+		Body: fmt.Sprintf("Success - %s. You will be alerted to move your car by %s", msg, moveByDate),
+	}
+	res, _ := twiml.Messages([]twiml.Element{message})
+	return res
 }

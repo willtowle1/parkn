@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/willtowle1/parkn/internal/common/logger"
 )
@@ -34,6 +35,13 @@ func (a *App) Start(ctx context.Context, errs chan error, serverAddress string) 
 	}()
 
 	a.logger.Info(ctx, fmt.Sprintf("parkn-service running on address: %s", serverAddress))
+}
+
+func (a *App) Shutdown(ctx context.Context, gracePeriod time.Duration) error {
+	termCtx, cancel := context.WithTimeout(ctx, gracePeriod)
+	defer cancel()
+	err := a.Server.Shutdown(termCtx)
+	return err
 }
 
 func WaitForTermination(ctx context.Context, logger logger.Logger, errs chan error) {

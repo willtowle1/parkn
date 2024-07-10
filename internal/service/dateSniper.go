@@ -25,7 +25,7 @@ type frequency struct {
 
 var (
 	possibleFrequencies = map[string]frequency{
-		"1ST & 3RD Monday":    {1, 1, 3},
+		"1ST & 3RD MONDAY":    {1, 1, 3},
 		"2ND & 4TH MONDAY":    {1, 2, 4},
 		"1ST & 3RD TUESDAY":   {2, 1, 3},
 		"2ND & 4TH TUESDAY":   {2, 2, 4},
@@ -105,7 +105,7 @@ func (d *DateSniper) findNextOccurrence(freq frequency) (time.Time, error) {
 
 	today := time.Now().Add(time.Hour * -24).In(loc)
 	nextOccurrence := rule.After(today, true).In(loc)
-	return truncateToMinute(nextOccurrence), nil
+	return d.truncateToDay(nextOccurrence), nil
 }
 
 func (d *DateSniper) getFreq(strArr []string) (frequency, bool) {
@@ -115,4 +115,8 @@ func (d *DateSniper) getFreq(strArr []string) (frequency, bool) {
 		}
 	}
 	return frequency{}, false
+}
+
+func (d *DateSniper) truncateToDay(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
