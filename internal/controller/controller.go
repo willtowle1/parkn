@@ -18,14 +18,7 @@ const (
 	errMissingPhoneNumber   = "no phone number found in context"
 	errMissingMedia         = "no media found in message"
 	errMissingImageEncoding = "no image encoding found in context"
-
-	phoneNumberKey   = "phoneNumber"
-	imageEncodingKey = "imageEncoding"
 )
-
-type successfulResponse struct {
-	AlertDate string `json:"alertDate"`
-}
 
 type IService interface {
 	CreateParkn(ctx context.Context, phoneNumber, mediaUrl string) (string, error)

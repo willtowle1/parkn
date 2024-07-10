@@ -37,7 +37,6 @@ func NewHttpClient(logger logger.Logger, textExtractor ITextExtractor, creds twi
 	}
 }
 
-// TODO: might be able to use twilio client package to do this...
 func (c *Client) FetchMedia(ctx context.Context, mediaUrl string) (*vision.Image, error) {
 
 	req, err := http.NewRequest(http.MethodGet, mediaUrl, nil)
@@ -66,10 +65,6 @@ func (c *Client) FetchMedia(ctx context.Context, mediaUrl string) (*vision.Image
 	}
 
 	return img, nil
-}
-
-func (c *Client) Notify(ctx context.Context, phoneNumber, message string) error {
-	return nil
 }
 
 func (c *Client) basicAuth() string {

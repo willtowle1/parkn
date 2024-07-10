@@ -33,7 +33,6 @@ type IDateSniper interface {
 
 type IClient interface {
 	FetchMedia(ctx context.Context, mediaUrl string) (*vision.Image, error)
-	Notify(ctx context.Context, phoneNumber, message string) error
 }
 
 type ParknService struct {
