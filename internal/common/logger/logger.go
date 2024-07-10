@@ -68,7 +68,7 @@ func (l *DefaultLogger) fmtLog(logLevel, message string, err error, keyValues ..
 
 	loc, _ := time.LoadLocation("EST")
 
-	timeNow := truncateToMinute(time.Now().In(loc)).String()
+	timeNow := truncateToMinuteString(time.Now().In(loc))
 
 	if err != nil {
 		return fmt.Sprintf("%s... %s -> %s: %s... %s", timeNow, logLevel, message, err.Error(), str)
@@ -77,6 +77,6 @@ func (l *DefaultLogger) fmtLog(logLevel, message string, err error, keyValues ..
 	return fmt.Sprintf("%s... %s -> %s... %s", timeNow, logLevel, message, str)
 }
 
-func truncateToMinute(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), 0, 0, t.Location())
+func truncateToMinuteString(t time.Time) string {
+	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), 0, 0, t.Location()).Format("01-02-2006 15:04:00")
 }

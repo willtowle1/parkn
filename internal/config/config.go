@@ -9,7 +9,7 @@ type Config struct {
 	MongoDatabaseName      string `mapstructure:"mongo_database_name"`
 	ServerAddress          string `mapstructure:"server_address"`
 	TerminationGracePeriod int    `mapstructure:"server_grace_period_in_seconds"`
-	AutoAlertPeriod        int    `mapstructure:"auto_alert_period_in_minutes`
+	AutoAlertPeriod        int    `mapstructure:"auto_alert_period_in_minutes"`
 	TwilioSID              string `mapstructure:"twilio_account_sid"`
 	TwilioNumber           string `mapstructure:"twilio_number"`
 	TwilioToken            string `mapstructure:"twilio_auth_token"`
